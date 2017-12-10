@@ -7,12 +7,22 @@ set matsize 200
 //Set NIFTIdir to your directory of choice, set WebURL to the root page
 //containing files you'd like to download
 loc NIFTIdir "\ldb92\Desktop\StataFiles_NIFTI"
-loc WebURL "https://sites.google.com/site/bivonastatadatasets/data-management/"
-
-sysdir set PLUS `NIFTIdir'
 
 //install renvars, if not already installed:
-//findit renvars
+//findit renvars no! be friendlier!
+sysdir set PLUS `NIFTIdir' //for simplicity can just dump  everything into one place :)
+net from http://www.stata-journal.com/software/sj5-4
+net install dm88_1 
+
+
+//just make ado :)
+cap program drop lewUrl
+program define lewUrl
+loc importFromPathPlusOptions ="import delimited"+" "+ "https://sites.google.com/site/bivonastatadatasets/data-management/" +"`1'"
+`importFromPathPlusOptions'
+end 
+
+
 
 *******************************************************************************
 ///////////////////////////////////////////////////////////////////////////////
@@ -21,8 +31,9 @@ sysdir set PLUS `NIFTIdir'
 *******************************************************************************
 
 //2014/////////////////////////////////////////////////////////////////////////
-loc WebURL "https://sites.google.com/site/bivonastatadatasets/data-management/"
-import delimited `WebURL'2014%20NIFTI%20Annual%20Survey.csv, bindq(strict) clear 
+lewUrl "2014%20NIFTI%20Annual%20Survey.csv, bindq(strict) clear" 
+
+
 
 drop submitteddate firstname lastname phonenumber emailaddress formname ///
 creationdate modifieddate completiontime responsehtml responsetext response ///
@@ -42,6 +53,7 @@ drop referred niftihelp
 
 sort name
 
+//try to make it into a program!
 egen num_missing = rowmiss(*)
 gen perc_missing = round(num_missing/c(k)*100, 0.1)
 li name perc_missing if perc_missing > 33
@@ -73,11 +85,7 @@ order year, first
 save 2014NIFTI.dta, replace
 
 //2015///////////////////////////////////////////////////////////////////////
-//normally I wouldn't keep pasting the loc WebURL text, but do-files
-//annoyingly won't remember local macros
-
-loc WebURL "https://sites.google.com/site/bivonastatadatasets/data-management/"
-import delimited `WebURL'2015%20NIFTI%20Annual%20Survey.csv, rowr(4:) varn(2) bindq(strict) clear
+lewUrl "2015%20NIFTI%20Annual%20Survey.csv, rowr(4:) varn(2) bindq(strict) clear"
 
 drop startdate-distributionchann
 drop v19-v23
@@ -136,8 +144,7 @@ save 2015NIFTI.dta, replace
  
  
  //2016///////////////////////////////////////////////////////////////////////
-loc WebURL "https://sites.google.com/site/bivonastatadatasets/data-management/"
-import delimited `WebURL'2016%20NIFTI%20Annual%20Survey.csv, rowr(4:) varn(2) bindq(strict) clear
+lewUrl "2016%20NIFTI%20Annual%20Survey.csv, rowr(4:) varn(2) bindq(strict) clear"
 
 drop startdate - distributionchannel
 drop v19 - v23
@@ -192,8 +199,7 @@ order year, first
 save 2016NIFTI.dta, replace
 
 //2017////////////////////////////////////////////////////////////////////////
-loc WebURL "https://sites.google.com/site/bivonastatadatasets/data-management/"
-import delimited `WebURL'2017%20NIFTI%20Annual%20Survey.csv, rowr(4) varn(2) bindq(strict) clear
+lewUrl "2017%20NIFTI%20Annual%20Survey.csv, rowr(4) varn(2) bindq(strict) clear"
 
 drop startdate-distributionchannel
 drop v19-v23
@@ -256,6 +262,8 @@ use 2014NIFTI.dta, clear
 forval i=5/7{
 	append using 201`i'NIFTI.dta
 }
+
+//let's talk about it--why would you use these stars below?
 
 //Getting things organized:
 gen BASIC_INFO= "***************************"
@@ -322,7 +330,7 @@ sort year name
 gen masterid = _n
 order masterid, before(year)
 
-/*
+/* TODO
 What still needs to be fixed:
 name, org, zipcode and locatn (together), 
 
@@ -376,7 +384,7 @@ drop if missing(masterid) // for some reason, statastates creates 22 missing obs
 order state_name state_fips, after(state)
 replace state_name = state if missing(state_name) & !missing(state)
 drop state state_fips _merge
-statastates, name(state_name)
+statastates, name(state_name) //breaks here :(!! install this command !!
 drop if missing(masterid) //same reason as a few lines above
 order state_abbrev state_fips, after(state_name)
 
@@ -384,6 +392,8 @@ order state_abbrev state_fips, after(state_name)
 //////////////// Fixing zipcode Var ///////////////////////////////////////////
 replace zipcode = "59501" if org == "Vilicus Training Institute" //again, found org online
 gen zip5 = string(real(zipcode), "%05.0f") // Why did I have to type real(var) here? I don't get it, but it works!
+//i think but not 100% sure: zipcode is string and %05.0f works on numbers only so need to make
+//it a number first!
 order zip5, after(zipcode)
 
 /////////////// Fixing fte Var ////////////////////////////////////////////////
@@ -426,13 +436,20 @@ replace numacres = "2.75" if numacres == "2.75 in operation/ 5 additional planne
 
 gen avgacres = .
 
+loc acreval1 = regexs(1) if regexm(numacres, "([0-9\.]+)(-)([0-9\.]+)") //breaks here for me
+/*
 loc acreval1 = regexs(1) if regexm(numacres, "([0-9\.]+)(-)([0-9\.]+)")
+if not allowed
+r(101);
+*/
+
 loc acreval2 = regexs(3) if regexm(numacres, "([0-9\.]+)(-)([0-9\.]+)")
 // I know I'll somehow need to make them into numeric because I won't be able to
 // average them as strings
+//yeah just destring afterwards
 
 
-drop if 
+drop if //invalid syntax
 
 /*
 INCUBATOR_PRACTICES
@@ -517,6 +534,7 @@ restore
 // this block reshapes all the new barrservs* vars into one long variable, so we can
 // pull out the unique values and form variables from them
 
+//this is illegal code!
 `"Helping participants to learn how to find their own farmland"' 
 `"Ongoing Marketing Support"' 
 `"Ongoing Technical Assistance"' `"Other"' 
@@ -559,6 +577,7 @@ niftiused: need to sort out unique values, make dummies for each
 
 */
 
+//do descriptive stats! some graphs etc!
 
 
 
